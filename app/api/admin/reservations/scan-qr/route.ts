@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     // 4. Update Reservation (Mark as verified/arrived)
     const updatedReservation = await prisma.reservation.update({
-      where: { bookingRef },
+      where: { bookingRef: bookingRefToFind },
       data: {
         discountVerified: true,
         qrScannedAt: new Date(),

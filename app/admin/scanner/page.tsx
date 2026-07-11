@@ -145,16 +145,33 @@ export default function ScannerPage() {
     };
   }, [useCamera, loading, scanResult, error, cameraMode]);
 
-  const handleScan = async (qrToken: string) => {
+  const handleScan = async (rawScannedString: string) => {
     setLoading(true);
     setError(null);
     setScanResult(null);
+
+    // 1. Sanitize whitespaces, newlines, and carriage returns
+    const sanitized = rawScannedString.replace(/[\r\n]+/g, "").trim();
+
+    let payload: any = {};
+
+    // 2. Check if the scanned string is a cryptographically signed Base64 token
+    if (sanitized.includes('.') && sanitized.split('.').length === 2) {
+      payload = { qrToken: sanitized };
+    } else {
+      // 3. Extract alphanumeric Booking ID sequence using Regex (e.g. from URLs or raw text)
+      // Matches RES- followed by 6 to 10 alphanumeric characters
+      const match = sanitized.toUpperCase().match(/(RES-[A-Z0-9]{6,10})/);
+      const extractedId = match ? match[1] : sanitized.toUpperCase();
+      
+      payload = { bookingRef: extractedId };
+    }
 
     try {
       const res = await fetch('/api/admin/reservations/scan-qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrToken })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
@@ -178,11 +195,14 @@ export default function ScannerPage() {
     setError(null);
     setScanResult(null);
 
+    // Sanitize manual code entry
+    const sanitizedCode = manualCode.replace(/[\r\n]+/g, "").trim().toUpperCase();
+
     try {
       const res = await fetch('/api/admin/reservations/scan-qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingRef: manualCode.trim().toUpperCase() })
+        body: JSON.stringify({ bookingRef: sanitizedCode })
       });
 
       const data = await res.json();
