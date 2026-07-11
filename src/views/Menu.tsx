@@ -149,35 +149,46 @@ const OrderModal: React.FC<OrderModalProps> = ({ dishName, onClose }) => {
 };
 
 // ─── OrderTrigger ────────────────────────────────────────────────────────────────
-const OrderTrigger: React.FC<{ dishName: string }> = ({ dishName }) => {
+const OrderTrigger: React.FC<{ dishName: string; isOutOfStock?: boolean }> = ({ dishName, isOutOfStock }) => {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
   const btnStyle: React.CSSProperties = {
-    backgroundColor: pressed ? '#15803d' : hovered ? '#16a34a' : '#C1440E',
-    borderColor: pressed ? '#166534' : hovered ? '#15803d' : 'rgba(193,68,14,0.5)',
-    boxShadow: pressed
+    backgroundColor: isOutOfStock ? '#cbd5e1' : pressed ? '#15803d' : hovered ? '#16a34a' : '#C1440E',
+    borderColor: isOutOfStock ? '#94a3b8' : pressed ? '#166534' : hovered ? '#15803d' : 'rgba(193,68,14,0.5)',
+    boxShadow: isOutOfStock
+      ? 'none'
+      : pressed
       ? '0 0px 0 0 #14532d'
       : hovered
       ? '0 1px 0 0 #15803d'
       : '0 3px 0 0 #903008',
-    transform: pressed ? 'translateY(3px)' : hovered ? 'translateY(2px)' : 'none',
+    transform: !isOutOfStock && pressed ? 'translateY(3px)' : !isOutOfStock && hovered ? 'translateY(2px)' : 'none',
     transition: 'all 0.15s ease',
   };
 
   return (
     <>
       <button
+        disabled={isOutOfStock}
         onClick={() => setOpen(true)}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={() => !isOutOfStock && setHovered(true)}
         onMouseLeave={() => { setHovered(false); setPressed(false); }}
-        onMouseDown={() => setPressed(true)}
+        onMouseDown={() => !isOutOfStock && setPressed(true)}
         onMouseUp={() => setPressed(false)}
         style={btnStyle}
-        className="relative px-3 py-1.5 text-[#F6EFE3] font-bold text-[9px] tracking-widest uppercase rounded-full border flex items-center gap-1 select-none"
+        className={`relative px-3 py-1.5 font-bold text-[9px] tracking-widest uppercase rounded-full border flex items-center gap-1 select-none ${
+          isOutOfStock ? 'text-zinc-500 cursor-not-allowed' : 'text-[#F6EFE3]'
+        }`}
       >
-        <ShoppingBag size={10} /> Order
+        {isOutOfStock ? (
+          <span>Sold Out</span>
+        ) : (
+          <>
+            <ShoppingBag size={10} /> Order
+          </>
+        )}
       </button>
       <AnimatePresence>
         {open && <OrderModal dishName={dishName} onClose={() => setOpen(false)} />}
@@ -348,11 +359,13 @@ const CategoryRow: React.FC<CategoryRowProps> = ({ category, dishes, onDishClick
         {dishes.map((dish) => (
           <motion.div
             key={dish.id}
-            whileHover={{ y: -4, scale: 1.02 }}
+            whileHover={dish.isOutOfStock ? {} : { y: -4, scale: 1.02 }}
             transition={{ duration: 0.25 }}
-            className="shrink-0 w-44 md:w-52 bg-[#F6EFE3] rounded-xl overflow-hidden border border-brand-dark/10 shadow-sm hover:shadow-xl transition-shadow cursor-pointer group"
+            className={`shrink-0 w-44 md:w-52 bg-[#F6EFE3] rounded-xl overflow-hidden border border-brand-dark/10 shadow-sm transition-all ${
+              dish.isOutOfStock ? 'opacity-60 grayscale cursor-not-allowed' : 'cursor-pointer hover:shadow-xl group'
+            }`}
             style={{ scrollSnapAlign: 'start' }}
-            onClick={() => onDishClick(dish)}
+            onClick={dish.isOutOfStock ? undefined : () => onDishClick(dish)}
           >
             {/* Image */}
             <div className="relative aspect-[4/3] overflow-hidden bg-brand-dark/5">
@@ -380,17 +393,29 @@ const CategoryRow: React.FC<CategoryRowProps> = ({ category, dishes, onDishClick
                 </div>
               )}
               {/* Popular top-left */}
-              {dish.isPopular && (
+              {dish.isPopular && !dish.isOutOfStock && (
                 <span className="absolute top-2 left-2 flex items-center gap-0.5 bg-brand-accent text-[#F6EFE3] text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full shadow">
                   <Flame size={7} className="fill-current" /> Popular
                 </span>
               )}
+              
+              {/* Sold out overlay */}
+              {dish.isOutOfStock && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <span className="bg-zinc-800 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full">
+                    Sold Out
+                  </span>
+                </div>
+              )}
+
               {/* Hover overlay – click to view */}
-              <div className="absolute inset-0 bg-brand-dark/0 group-hover:bg-brand-dark/30 transition-colors duration-300 flex items-center justify-center">
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-[#F6EFE3] text-[9px] font-bold uppercase tracking-widest bg-brand-accent/90 px-3 py-1.5 rounded-full">
-                  View Details
-                </span>
-              </div>
+              {!dish.isOutOfStock && (
+                <div className="absolute inset-0 bg-brand-dark/0 group-hover:bg-brand-dark/30 transition-colors duration-300 flex items-center justify-center">
+                  <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-[#F6EFE3] text-[9px] font-bold uppercase tracking-widest bg-brand-accent/90 px-3 py-1.5 rounded-full">
+                    View Details
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Card body */}
@@ -404,7 +429,7 @@ const CategoryRow: React.FC<CategoryRowProps> = ({ category, dishes, onDishClick
               <p className="text-[10px] font-sans text-brand-dark/60 leading-relaxed mt-1 line-clamp-2">{dish.description}</p>
               {/* Order button – stops propagation so lightbox doesn't open */}
               <div className="mt-2 pt-2 border-t border-brand-dark/5" onClick={(e) => e.stopPropagation()}>
-                <OrderTrigger dishName={dish.name} />
+                <OrderTrigger dishName={dish.name} isOutOfStock={dish.isOutOfStock} />
               </div>
             </div>
           </motion.div>

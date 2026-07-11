@@ -44,17 +44,19 @@ export const DishCard: React.FC<DishCardProps> = ({ dish, onOrderClick }) => {
 
   return (
     <motion.div
-      onClick={handleOrder}
+      onClick={dish.isOutOfStock ? undefined : handleOrder}
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-50px' }}
       transition={{ duration: 0.6, ease: 'easeOut' }}
-      whileHover={{ y: -8 }}
-      className="group relative bg-[#F6EFE3] rounded-2xl overflow-hidden border border-brand-dark/10 shadow-sm transition-shadow hover:shadow-xl flex flex-col h-full cursor-pointer"
+      whileHover={dish.isOutOfStock ? {} : { y: -8 }}
+      className={`group relative bg-[#F6EFE3] rounded-2xl overflow-hidden border border-brand-dark/10 shadow-sm transition-shadow flex flex-col h-full ${
+        dish.isOutOfStock ? 'opacity-60 grayscale cursor-not-allowed' : 'cursor-pointer hover:shadow-xl'
+      }`}
     >
       {/* Popular / Veg badges */}
       <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-        {dish.isPopular && (
+        {dish.isPopular && !dish.isOutOfStock && (
           <span className="flex items-center space-x-1 bg-brand-accent text-[#F6EFE3] text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md">
             <Flame size={10} className="fill-current" />
             <span>Popular</span>
@@ -77,6 +79,15 @@ export const DishCard: React.FC<DishCardProps> = ({ dish, onOrderClick }) => {
         />
         {/* Dark overlay on hover */}
         <div className="absolute inset-0 bg-brand-dark/10 group-hover:bg-brand-dark/20 transition-colors duration-300" />
+        
+        {/* Sold out overlay */}
+        {dish.isOutOfStock && (
+          <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+            <span className="bg-zinc-800 text-white text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full">
+              Sold Out
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -116,13 +127,22 @@ export const DishCard: React.FC<DishCardProps> = ({ dish, onOrderClick }) => {
           <span className="font-display text-lg font-bold text-brand-dark">
             {dish.price}
           </span>
-          <button 
-            onClick={handleOrder}
-            className="relative px-5 py-2.5 bg-brand-accent text-[#F6EFE3] font-bold text-[10px] tracking-widest uppercase rounded-xl border border-brand-accent/50 shadow-[0_4px_0_0_#903008] hover:translate-y-[2px] hover:shadow-[0_2px_0_0_#903008] active:translate-y-[4px] active:shadow-[0_0px_0_0_#903008] transition-all flex items-center gap-1.5 select-none"
-          >
-            <ShoppingBag size={12} />
-            <span>Order Now</span>
-          </button>
+          {dish.isOutOfStock ? (
+            <button 
+              disabled
+              className="relative px-5 py-2.5 bg-zinc-300 text-zinc-500 font-bold text-[10px] tracking-widest uppercase rounded-xl border border-zinc-400 cursor-not-allowed select-none"
+            >
+              Sold Out
+            </button>
+          ) : (
+            <button 
+              onClick={handleOrder}
+              className="relative px-5 py-2.5 bg-brand-accent text-[#F6EFE3] font-bold text-[10px] tracking-widest uppercase rounded-xl border border-brand-accent/50 shadow-[0_4px_0_0_#903008] hover:translate-y-[2px] hover:shadow-[0_2px_0_0_#903008] active:translate-y-[4px] active:shadow-[0_0px_0_0_#903008] transition-all flex items-center gap-1.5 select-none"
+            >
+              <ShoppingBag size={12} />
+              <span>Order Now</span>
+            </button>
+          )}
         </div>
       </div>
     </motion.div>
