@@ -194,14 +194,13 @@ export const Home: React.FC = () => {
         
         const [settingsRes, menuRes, offersRes, testimonialsRes, galleryRes, branchesRes] = await Promise.all([
           fetch(`/api/cms/homepage?draft=${previewMode}`),
-          fetch('/api/cms/menu', {
+          fetch(`/api/cms/menu?cacheBust=${Date.now()}_${Math.random().toString(36).substring(7)}`, {
             cache: 'no-store',
             next: { revalidate: 0 },
             headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate',
+              'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate',
               'Pragma': 'no-cache',
-              'Expires': '0',
-              'X-Cache-Bust': Date.now().toString()
+              'Expires': '0'
             }
           }),
           fetch('/api/cms/offers?activeOnly=true&homepageOnly=true'),

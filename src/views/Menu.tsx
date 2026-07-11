@@ -431,14 +431,13 @@ export const Menu: React.FC = () => {
   // Fetch live menu categories and dishes from the DB (no cache)
   const loadMenu = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/cms/menu', {
+      const res = await fetch(`/api/cms/menu?cacheBust=${Date.now()}_${Math.random().toString(36).substring(7)}`, {
         cache: 'no-store',
         next: { revalidate: 0 },
         headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate',
+          'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate',
           'Pragma': 'no-cache',
-          'Expires': '0',
-          'X-Cache-Bust': Date.now().toString()
+          'Expires': '0'
         }
       });
       const data = await res.json();
@@ -457,7 +456,7 @@ export const Menu: React.FC = () => {
   }, [loadMenu]);
 
   // 1. Force Client-Side Router Route Refresh & Dynamic Polling
-  // Refreshes Next.js client-side cache tree silently on window focus or 5-second interval heartbeat
+  // Refreshes Next.js client-side cache tree silently on window focus or 3-second interval heartbeat
   useEffect(() => {
     const handleFocus = () => {
       router.refresh();
@@ -471,7 +470,7 @@ export const Menu: React.FC = () => {
     const interval = setInterval(() => {
       loadMenu();
       router.refresh();
-    }, 5000);
+    }, 3000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
