@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, Trash2, ArrowUp, ArrowDown, FolderPlus, Image, FileText, Upload,
   X, Check, Loader2, Sparkles, AlertCircle, Edit, Star, RefreshCw, ChevronRight
@@ -48,7 +48,9 @@ export default function GalleryCMS() {
       const data = await res.json();
       if (data.success) {
         setPhotos(data.photos || []);
-        setAlbums(['All', ...data.albums]);
+        // Safely extract and filter albums
+        const uniqueFetchedAlbums = Array.isArray(data.albums) ? data.albums : [];
+        setAlbums(['All', ...uniqueFetchedAlbums]);
       }
     } catch (e) {
       console.error('Failed to fetch gallery photos:', e);
@@ -56,6 +58,41 @@ export default function GalleryCMS() {
       setLoading(false);
     }
   }
+
+  // 1. TARGET ALBUM DROPDOWN OPTIONS LIST
+  // Ensures 'General' is always present and selected by default even if albums is empty
+  const albumOptions = useMemo(() => {
+    const list = albums.filter(a => a !== 'All' && a !== 'General');
+    return ['General', ...list];
+  }, [albums]);
+
+  // 2. DUPLICATE RENDER PROTECTION
+  // Filters out duplicate rows by photo.id and enforces unique keys in the React tree
+  const uniquePhotos = useMemo(() => {
+    const seen = new Set();
+    return photos.filter(p => {
+      if (!p.id) return false;
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [photos]);
+
+  const filteredPhotos = useMemo(() => {
+    return selectedAlbum === 'All'
+      ? uniquePhotos
+      : uniquePhotos.filter(p => p.albumName === selectedAlbum);
+  }, [uniquePhotos, selectedAlbum]);
+
+  const [visibleCount, setVisibleCount] = useState(12);
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [selectedAlbum]);
+
+  const displayedPhotos = useMemo(() => {
+    return filteredPhotos.slice(0, visibleCount);
+  }, [filteredPhotos, visibleCount]);
 
   // Handle image upload
   const handleUploadSubmit = async (e: React.FormEvent) => {
@@ -124,15 +161,19 @@ export default function GalleryCMS() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: photo.id,
-          title: photo.title,
-          altText: photo.altText,
-          albumName: photo.albumName,
-          isFeatured: !photo.isFeatured
+          data: {
+            title: photo.title,
+            altText: photo.altText,
+            albumName: photo.albumName,
+            isFeatured: !photo.isFeatured
+          }
         })
       });
       const data = await res.json();
       if (data.success) {
         loadGalleryData();
+      } else {
+        alert(data.error || 'Failed to update feature status');
       }
     } catch (e) {
       console.error(e);
@@ -167,19 +208,21 @@ export default function GalleryCMS() {
         }
       }
 
-      // 2. Put metadata updates
+      // 2. Put metadata updates nested inside 'data' key to align with API
       const res = await fetch('/api/cms/gallery', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingPhoto.id,
-          title: editTitle,
-          altText: editAltText,
-          albumName: editAlbum,
-          isFeatured: editIsFeatured,
-          src: finalSrc,
-          menuCategory: editMenuCategory || null,
-          menuDishName: editMenuDish || null
+          data: {
+            title: editTitle,
+            altText: editAltText,
+            albumName: editAlbum,
+            isFeatured: editIsFeatured,
+            src: finalSrc,
+            menuCategory: editMenuCategory || null,
+            menuDishName: editMenuDish || null
+          }
         })
       });
 
@@ -198,20 +241,19 @@ export default function GalleryCMS() {
 
   // Reorder photo (index swaps)
   const handleMove = async (index: number, direction: 'up' | 'down') => {
-    const list = filteredPhotos;
+    const list = [...filteredPhotos];
     const targetIdx = direction === 'up' ? index - 1 : index + 1;
     if (targetIdx < 0 || targetIdx >= list.length) return;
 
-    // Build batch payload of ID-to-order mapping
-    const reorderedList = [...list];
     // Swap elements
-    const temp = reorderedList[index];
-    reorderedList[index] = reorderedList[targetIdx];
-    reorderedList[targetIdx] = temp;
+    const temp = list[index];
+    list[index] = list[targetIdx];
+    list[targetIdx] = temp;
 
-    const payload = reorderedList.map((p, idx) => ({
+    // Build reorder items payload structured specifically as [{id, order}]
+    const payload = list.map((p, idx) => ({
       id: p.id,
-      displayOrder: idx + 1
+      order: idx + 1
     }));
 
     try {
@@ -219,13 +261,15 @@ export default function GalleryCMS() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'reorder',
-          reorders: payload
+          bulk: true,
+          items: payload
         })
       });
       const data = await res.json();
       if (data.success) {
         loadGalleryData();
+      } else {
+        alert(data.error || 'Failed to reorder items');
       }
     } catch (e) {
       console.error(e);
@@ -249,84 +293,73 @@ export default function GalleryCMS() {
   };
 
   const handleAddNewAlbum = () => {
-    if (!newAlbumName) return;
-    if (!albums.includes(newAlbumName)) {
-      setAlbums([...albums, newAlbumName]);
-      setUploadAlbum(newAlbumName);
+    if (!newAlbumName.trim()) return;
+    const cleanedAlbumName = newAlbumName.trim();
+    if (!albums.includes(cleanedAlbumName)) {
+      setAlbums([...albums, cleanedAlbumName]);
+      setUploadAlbum(cleanedAlbumName);
     }
     setNewAlbumName('');
     setShowAddAlbum(false);
   };
 
-  const [visibleCount, setVisibleCount] = useState(12);
-
-  useEffect(() => {
-    setVisibleCount(12);
-  }, [selectedAlbum]);
-
-  const filteredPhotos = selectedAlbum === 'All'
-    ? photos
-    : photos.filter(p => p.albumName === selectedAlbum);
-
-  const displayedPhotos = filteredPhotos.slice(0, visibleCount);
-
   return (
-    <div className="space-y-8 animate-fadeIn">
+    <div className="space-y-8 animate-fadeIn font-sans">
       {/* Header Card */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-8 rounded-3xl shadow-sm border border-brand-dark/5">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
         <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-brand-accent flex items-center gap-2">
-            <Sparkles size={14} className="text-brand-gold" />
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+            <Sparkles size={12} className="text-zinc-400" />
             Media & Gallery Library
           </span>
-          <h1 className="font-display text-3xl font-black text-brand-dark mt-2">
+          <h1 className="font-display text-2xl font-black text-zinc-800 mt-2">
             Gallery Management
           </h1>
-          <p className="text-sm text-brand-dark/60 mt-1">
-            Organize albums, drag-and-drop order, assign tags, feature favorites on home page, and upload WebP images.
+          <p className="text-xs text-zinc-500 mt-1">
+            Organize albums, customize layout order, assign tags, feature favorites on home page, and upload WebP images.
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Sidebar: Albums/Folders */}
+        {/* Left Sidebar: Albums/Folders (Clean, desaturated border list) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="font-display text-lg font-bold text-brand-dark flex items-center gap-2">
+            <h2 className="font-display text-sm font-bold uppercase tracking-wider text-zinc-700 flex items-center gap-2">
               <span>Albums</span>
-              <span className="text-xs bg-brand-accent/10 text-brand-accent px-2 py-0.5 rounded-full">
+              <span className="text-[10px] bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full border border-zinc-200">
                 {albums.length - 1}
               </span>
             </h2>
             <button
               onClick={() => setShowAddAlbum(!showAddAlbum)}
-              className="p-1.5 text-brand-accent hover:bg-brand-accent/5 rounded-lg transition-all"
+              className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 rounded-lg transition-all"
               title="Add New Album"
             >
-              <FolderPlus size={18} />
+              <FolderPlus size={16} />
             </button>
           </div>
 
           {showAddAlbum && (
-            <div className="bg-white p-4 rounded-3xl border border-brand-dark/5 shadow-sm space-y-3 animate-slideDown">
+            <div className="bg-white p-4 rounded-xl border border-zinc-200 shadow-sm space-y-3 animate-slideDown">
               <input
                 type="text"
                 placeholder="Album name..."
                 value={newAlbumName}
                 onChange={(e) => setNewAlbumName(e.target.value)}
-                className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-accent"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
               />
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setShowAddAlbum(false)}
-                  className="px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase"
+                  className="px-3 py-1.5 rounded-lg border border-zinc-200 text-[10px] font-bold uppercase text-zinc-500 hover:bg-zinc-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAddNewAlbum}
-                  className="px-3 py-1.5 rounded-lg bg-brand-accent text-white text-[10px] font-bold uppercase shadow-sm"
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 text-white text-[10px] font-bold uppercase shadow-sm hover:bg-zinc-900"
                 >
                   Create
                 </button>
@@ -334,19 +367,19 @@ export default function GalleryCMS() {
             </div>
           )}
 
-          <div className="bg-white rounded-3xl p-4 shadow-sm border border-brand-dark/5 space-y-1">
+          <div className="bg-white rounded-2xl p-4 border border-zinc-200 space-y-1 shadow-sm">
             {albums.map((album) => (
               <button
                 key={album}
                 onClick={() => setSelectedAlbum(album)}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-left text-xs font-bold uppercase tracking-wider transition-all ${
+                className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-left text-xs font-bold uppercase tracking-wider transition-all ${
                   selectedAlbum === album
-                    ? 'bg-brand-accent/10 text-brand-accent font-black'
-                    : 'text-brand-dark hover:bg-brand-dark/5'
+                    ? 'bg-zinc-800 text-white font-bold'
+                    : 'text-zinc-600 hover:bg-zinc-50'
                 }`}
               >
                 <span>{album}</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={12} />
               </button>
             ))}
           </div>
@@ -355,38 +388,38 @@ export default function GalleryCMS() {
         {/* Center/Right Area: Upload File & Grid List */}
         <div className="lg:col-span-9 space-y-8">
           
-          {/* Upload Panel */}
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-brand-dark/5">
-            <h3 className="font-display font-bold text-base text-brand-dark mb-4 flex items-center gap-2">
-              <Upload size={18} className="text-brand-accent" />
+          {/* Upload Panel (Safer desaturated matte grays and zinc styling) */}
+          <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">
+            <h3 className="font-display font-bold text-sm text-zinc-800 mb-4 flex items-center gap-2">
+              <Upload size={16} className="text-zinc-500" />
               <span>Upload New Photo</span>
             </h3>
 
             <form onSubmit={handleUploadSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                {/* File input */}
-                <div className="border-2 border-dashed border-brand-dark/10 hover:border-brand-accent rounded-2xl p-6 text-center transition-all cursor-pointer relative bg-brand-bg">
+                {/* File input (Desaturated gray border box) */}
+                <div className="border border-dashed border-zinc-300 hover:border-zinc-500 rounded-xl p-6 text-center transition-all cursor-pointer relative bg-zinc-50/50">
                   {uploadFile ? (
                     <div className="space-y-2 flex flex-col items-center">
-                      <Image className="text-brand-accent" size={32} />
-                      <span className="text-xs font-bold text-brand-dark truncate max-w-[200px]">
+                      <Image className="text-zinc-500" size={32} />
+                      <span className="text-xs font-bold text-zinc-700 truncate max-w-[200px]">
                         {uploadFile.name}
                       </span>
                       <button
                         type="button"
                         onClick={() => setUploadFile(null)}
-                        className="text-[10px] text-red-500 underline font-semibold"
+                        className="text-[10px] text-red-500 underline font-semibold hover:text-red-700"
                       >
                         Remove
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Upload className="mx-auto text-brand-dark/35" size={32} />
-                      <span className="block text-xs font-bold text-brand-dark/65">
+                      <Upload className="mx-auto text-zinc-400" size={32} />
+                      <span className="block text-xs font-bold text-zinc-600">
                         Drag and drop image file here
                       </span>
-                      <span className="block text-[10px] text-brand-dark/45">
+                      <span className="block text-[10px] text-zinc-400">
                         Supported formats: JPG, PNG, WEBP. Auto-compresses.
                       </span>
                       <input
@@ -402,25 +435,25 @@ export default function GalleryCMS() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-1.5">Photo Title *</label>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Photo Title *</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. Paneer Tikka Platter"
                       value={uploadTitle}
                       onChange={(e) => setUploadTitle(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-brand-accent"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-1.5">Target Album</label>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Target Album</label>
                     <select
                       value={uploadAlbum}
                       onChange={(e) => setUploadAlbum(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none text-zinc-800"
                     >
-                      {albums.filter(a => a !== 'All').map(a => (
+                      {albumOptions.map(a => (
                         <option key={a} value={a}>{a}</option>
                       ))}
                     </select>
@@ -430,47 +463,47 @@ export default function GalleryCMS() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-1.5">SEO Alt Text (Best practices for search optimization)</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">SEO Alt Text (Best practices for search optimization)</label>
                   <input
                     type="text"
-                    placeholder="e.g. delicious paneer tikka starters served at Balaji Santosh Family Dhaba Moinabad"
+                    placeholder="e.g. delicious paneer tikka starters served at Balaji Chilkur Family Dhaba"
                     value={uploadAltText}
                     onChange={(e) => setUploadAltText(e.target.value)}
-                    className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-1.5">Link Category (Menu Jump)</label>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Link Category (Menu Jump)</label>
                     <input
                       type="text"
                       placeholder="e.g. Paneer Starters"
                       value={uploadMenuCategory}
                       onChange={(e) => setUploadMenuCategory(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-1.5">Link Dish (Menu Jump)</label>
+                    <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Link Dish (Menu Jump)</label>
                     <input
                       type="text"
                       placeholder="e.g. Paneer Butter Masala"
                       value={uploadMenuDish}
                       onChange={(e) => setUploadMenuDish(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-dark/10 rounded-xl px-3 py-2 text-xs focus:outline-none"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                     />
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-brand-dark cursor-pointer">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={uploadIsFeatured}
                       onChange={(e) => setUploadIsFeatured(e.target.checked)}
-                      className="rounded text-brand-accent focus:ring-brand-accent"
+                      className="rounded text-zinc-800 focus:ring-zinc-800"
                     />
                     <span>Highlight/Feature on Homepage Gallery</span>
                   </label>
@@ -478,11 +511,11 @@ export default function GalleryCMS() {
                   <button
                     type="submit"
                     disabled={isUploading || !uploadFile}
-                    className="bg-brand-accent hover:bg-brand-accent/90 text-white font-bold uppercase tracking-wider text-xs px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                    className="bg-zinc-800 hover:bg-zinc-900 text-white font-bold uppercase tracking-wider text-[10px] px-5 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
                   >
                     {isUploading ? (
                       <>
-                        <Loader2 size={12} className="animate-spin" />
+                        <Loader2 size={10} className="animate-spin" />
                         <span>Uploading...</span>
                       </>
                     ) : (
@@ -496,44 +529,44 @@ export default function GalleryCMS() {
 
           {/* Photo List Grid */}
           <div className="space-y-4">
-            <h3 className="font-display font-bold text-base text-brand-dark px-1 flex items-center justify-between">
+            <h3 className="font-display font-bold text-sm text-zinc-700 px-1 flex items-center justify-between">
               <span>Gallery Grid ({filteredPhotos.length} Items)</span>
             </h3>
 
             {filteredPhotos.length === 0 ? (
-              <div className="bg-white rounded-3xl p-16 border border-brand-dark/5 text-center flex flex-col items-center">
-                <AlertCircle className="text-brand-dark/30 mb-4" size={48} />
-                <h3 className="font-display text-lg font-bold text-brand-dark">No Photos Found</h3>
-                <p className="text-sm text-brand-dark/50 mt-1">Upload a photo to populate this album.</p>
+              <div className="bg-white rounded-2xl p-16 border border-zinc-200 text-center flex flex-col items-center">
+                <AlertCircle className="text-zinc-400 mb-4" size={48} />
+                <h3 className="font-display text-base font-bold text-zinc-700">No Photos Found</h3>
+                <p className="text-xs text-zinc-500 mt-1">Upload a photo to populate this album.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {displayedPhotos.map((photo, index) => (
                   <div 
                     key={photo.id} 
-                    className="bg-white border border-brand-dark/5 rounded-3xl overflow-hidden shadow-sm flex flex-col justify-between group"
+                    className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between group"
                   >
-                    <div className="relative aspect-square bg-brand-dark">
+                    <div className="relative aspect-square bg-zinc-950">
                       <img src={photo.src} alt={photo.altText || photo.title} loading="lazy" className="w-full h-full object-cover" />
                       
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
+                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
                         <div className="w-full flex justify-between items-end">
                           <div>
-                            <span className="text-[9px] font-bold uppercase tracking-widest text-brand-gold">
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
                               {photo.albumName}
                             </span>
-                            <h4 className="font-display font-bold text-[#F6EFE3] text-sm leading-tight mt-0.5">
+                            <h4 className="font-display font-bold text-white text-sm leading-tight mt-0.5">
                               {photo.title}
                             </h4>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => handleToggleFeatured(photo)}
                               className={`p-1.5 rounded-lg backdrop-blur-md transition-colors ${
                                 photo.isFeatured 
-                                  ? 'bg-brand-gold text-brand-dark' 
-                                  : 'bg-black/55 text-white hover:bg-black/75'
+                                  ? 'bg-zinc-100 text-zinc-800' 
+                                  : 'bg-black/55 text-zinc-400 hover:bg-black/75'
                               }`}
                               title="Feature on Home Page"
                             >
@@ -549,7 +582,7 @@ export default function GalleryCMS() {
                                 setEditMenuCategory(photo.menuCategory || '');
                                 setEditMenuDish(photo.menuDishName || '');
                               }}
-                              className="p-1.5 rounded-lg bg-black/55 text-white hover:bg-black/75 backdrop-blur-md transition-colors"
+                              className="p-1.5 rounded-lg bg-black/55 text-zinc-200 hover:bg-black/75 backdrop-blur-md transition-colors"
                               title="Edit Metadata & File"
                             >
                               <Edit size={12} />
@@ -559,18 +592,18 @@ export default function GalleryCMS() {
                       </div>
 
                       {/* Display Order Position indicator */}
-                      <span className="absolute top-4 left-4 bg-black/60 text-[#F6EFE3] text-[9px] font-mono font-bold px-2 py-0.5 rounded backdrop-blur-sm">
+                      <span className="absolute top-4 left-4 bg-black/60 text-zinc-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded backdrop-blur-sm">
                         Order #{photo.displayOrder || index + 1}
                       </span>
                     </div>
 
                     {/* Bottom Order Sorter Bar & Delete */}
-                    <div className="px-5 py-3 bg-[#ECE3D4]/25 border-t border-brand-dark/5 flex justify-between items-center">
+                    <div className="px-5 py-2.5 bg-zinc-50 border-t border-zinc-200 flex justify-between items-center">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleMove(index, 'up')}
                           disabled={index === 0}
-                          className="p-1 hover:bg-brand-dark/5 rounded text-brand-dark disabled:opacity-30"
+                          className="p-1 hover:bg-zinc-200 rounded text-zinc-600 disabled:opacity-30"
                           title="Move Order Up"
                         >
                           <ArrowUp size={14} />
@@ -578,7 +611,7 @@ export default function GalleryCMS() {
                         <button
                           onClick={() => handleMove(index, 'down')}
                           disabled={index === filteredPhotos.length - 1}
-                          className="p-1 hover:bg-brand-dark/5 rounded text-brand-dark disabled:opacity-30"
+                          className="p-1 hover:bg-zinc-200 rounded text-zinc-600 disabled:opacity-30"
                           title="Move Order Down"
                         >
                           <ArrowDown size={14} />
@@ -587,7 +620,7 @@ export default function GalleryCMS() {
 
                       <button
                         onClick={() => handleDeletePhoto(photo.id)}
-                        className="p-1 hover:text-red-500 rounded transition-colors text-brand-dark/55"
+                        className="p-1.5 hover:text-red-500 hover:bg-red-50 rounded transition-colors text-zinc-400"
                         title="Delete Image"
                       >
                         <Trash2 size={14} />
@@ -603,7 +636,7 @@ export default function GalleryCMS() {
                 <button
                   type="button"
                   onClick={() => setVisibleCount(prev => prev + 12)}
-                  className="px-6 py-3.5 rounded-2xl bg-brand-dark hover:bg-brand-dark/90 text-white font-display font-extrabold uppercase tracking-wider text-[10px] shadow-lg shadow-brand-dark/15 transition-all"
+                  className="px-6 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-900 text-white font-display font-extrabold uppercase tracking-wider text-[10px] shadow-sm transition-all border border-zinc-700"
                 >
                   Load More Images
                 </button>
@@ -615,26 +648,26 @@ export default function GalleryCMS() {
 
       {/* --- Edit Metadata & Replace Image Modal --- */}
       {editingPhoto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-brand-dark/40 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-          <form onSubmit={handleSaveMetadata} className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl border border-brand-dark/5 space-y-6 my-8">
-            <div className="flex justify-between items-center border-b border-brand-dark/5 pb-4">
-              <h3 className="font-display font-black text-xl text-brand-dark">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+          <form onSubmit={handleSaveMetadata} className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-zinc-250 space-y-5 my-8">
+            <div className="flex justify-between items-center border-b border-zinc-100 pb-3">
+              <h3 className="font-display font-black text-lg text-zinc-800">
                 Edit Image Details
               </h3>
-              <button type="button" onClick={() => { setEditingPhoto(null); setReplaceFile(null); }} className="p-1 text-brand-dark/45 hover:text-brand-dark">
-                <X size={20} />
+              <button type="button" onClick={() => { setEditingPhoto(null); setReplaceFile(null); }} className="p-1 text-zinc-400 hover:text-zinc-700">
+                <X size={18} />
               </button>
             </div>
 
             <div className="space-y-4">
-              <div className="flex gap-4 items-center bg-brand-bg p-4 rounded-2xl border border-brand-dark/5">
-                <img src={editingPhoto.src} alt={editingPhoto.title} className="w-24 h-24 object-cover rounded-xl shadow-sm border border-brand-dark/10" />
+              <div className="flex gap-4 items-center bg-zinc-50 p-4 rounded-xl border border-zinc-200">
+                <img src={editingPhoto.src} alt={editingPhoto.title} className="w-20 h-20 object-cover rounded-lg border border-zinc-200 shadow-sm" />
                 
                 <div className="space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-dark/45 block">Replace Image File</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 block">Replace Image File</span>
                   
-                  <label className="cursor-pointer bg-brand-dark hover:bg-brand-dark/95 text-white px-4 py-2.5 rounded-xl font-bold uppercase text-[10px] tracking-wider flex items-center gap-1.5 shadow-md">
-                    <RefreshCw size={12} />
+                  <label className="cursor-pointer bg-zinc-800 hover:bg-zinc-900 text-white px-3 py-2 rounded-xl font-bold uppercase text-[9px] tracking-wider flex items-center gap-1.5 shadow-sm border border-zinc-700">
+                    <RefreshCw size={10} />
                     {replaceFile ? 'Replace selected' : 'Upload New File'}
                     <input
                       type="file"
@@ -644,7 +677,7 @@ export default function GalleryCMS() {
                     />
                   </label>
                   {replaceFile && (
-                    <span className="text-[9px] text-brand-accent font-bold truncate max-w-[150px] block">
+                    <span className="text-[9px] text-zinc-600 font-bold truncate max-w-[150px] block">
                       Selected: {replaceFile.name}
                     </span>
                   )}
@@ -652,85 +685,85 @@ export default function GalleryCMS() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-brand-dark/65 mb-2">Photo Title *</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Photo Title *</label>
                 <input
                   type="text"
                   required
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full bg-brand-bg border border-brand-dark/10 rounded-2xl px-4 py-3 text-sm focus:outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-brand-dark/65 mb-2">Target Album *</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Target Album *</label>
                 <select
                   value={editAlbum}
                   onChange={(e) => setEditAlbum(e.target.value)}
-                  className="w-full bg-brand-bg border border-brand-dark/10 rounded-2xl px-4 py-3 text-sm focus:outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none text-zinc-800"
                 >
-                  {albums.filter(a => a !== 'All').map(a => (
+                  {albumOptions.map(a => (
                     <option key={a} value={a}>{a}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-brand-dark/65 mb-2">SEO Alt Text</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">SEO Alt Text</label>
                 <input
                   type="text"
                   value={editAltText}
                   onChange={(e) => setEditAltText(e.target.value)}
-                  className="w-full bg-brand-bg border border-brand-dark/10 rounded-2xl px-4 py-3 text-sm focus:outline-none"
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-2">Link Category (Menu Jump)</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Link Category (Menu Jump)</label>
                   <input
                     type="text"
                     value={editMenuCategory}
                     onChange={(e) => setEditMenuCategory(e.target.value)}
-                    className="w-full bg-brand-bg border border-brand-dark/10 rounded-2xl px-4 py-3 text-xs focus:outline-none"
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-brand-dark/50 mb-2">Link Dish (Menu Jump)</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">Link Dish (Menu Jump)</label>
                   <input
                     type="text"
                     value={editMenuDish}
                     onChange={(e) => setEditMenuDish(e.target.value)}
-                    className="w-full bg-brand-bg border border-brand-dark/10 rounded-2xl px-4 py-3 text-xs focus:outline-none"
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-zinc-400 text-zinc-800"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-xs font-semibold text-brand-dark cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editIsFeatured}
                     onChange={(e) => setEditIsFeatured(e.target.checked)}
-                    className="rounded text-brand-accent focus:ring-brand-accent"
+                    className="rounded text-zinc-800 focus:ring-zinc-800"
                   />
                   <span>Feature on Homepage Gallery Slider</span>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-brand-dark/5">
+            <div className="flex justify-end gap-3 pt-3 border-t border-zinc-100">
               <button
                 type="button"
                 onClick={() => { setEditingPhoto(null); setReplaceFile(null); }}
-                className="px-5 py-3 rounded-xl border border-brand-dark/10 hover:bg-brand-dark/5 text-brand-dark text-xs font-bold uppercase tracking-wider"
+                className="px-4 py-2 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-zinc-600 text-xs font-bold uppercase tracking-wider"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-6 py-3 rounded-xl bg-brand-accent hover:bg-brand-accent/90 text-white text-xs font-bold uppercase tracking-wider shadow-md"
+                className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider shadow-sm border border-zinc-750"
               >
                 Save Details
               </button>
