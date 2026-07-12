@@ -875,9 +875,6 @@ export const Home: React.FC = () => {
             {/* Card 1: Moinabad Branch */}
             <div
               onClick={() => setActiveBranch(0)}
-              style={{
-                transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease',
-              }}
               onMouseEnter={e => {
                 if (activeBranch !== 0) {
                   (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)';
@@ -894,6 +891,7 @@ export const Home: React.FC = () => {
               }}
               className="cursor-pointer rounded-[20px] border flex items-center justify-center"
               style={{
+                transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease',
                 padding: '2.25rem 2rem',
                 background: activeBranch === 0 ? '#FFF9F2' : '#ffffff',
                 borderColor: activeBranch === 0 ? '#D4AF37' : 'rgba(30,20,10,0.10)',
