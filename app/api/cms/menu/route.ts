@@ -165,7 +165,7 @@ export async function POST(request: Request) {
           name: data.name,
           teluguName: data.teluguName || null,
           description: data.description || null,
-          price: data.price,
+          price: String(data.price),        // DB stores price as String
           image: data.image,
           categoryId: data.categoryId,
           isVegetarian: data.isVegetarian ?? true,
@@ -255,7 +255,7 @@ export async function PUT(request: Request) {
           name: data.name,
           teluguName: data.teluguName,
           description: data.description,
-          price: data.price,
+          price: data.price !== undefined && data.price !== null ? String(data.price) : undefined,
           image: data.image,
           categoryId: data.categoryId,
           isVegetarian: data.isVegetarian,
