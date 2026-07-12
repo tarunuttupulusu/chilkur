@@ -56,7 +56,11 @@ export default function MenuCMS() {
   async function loadMenuData() {
     setLoading(true);
     try {
-      const res = await fetch('/api/cms/menu');
+      // Cache-busting ensures admin always sees the freshest DB state after a save
+      const res = await fetch(`/api/cms/menu?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (data.success) {
         setCategories(data.categories || []);
@@ -67,6 +71,18 @@ export default function MenuCMS() {
       setError(e.message || 'Error fetching menu');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Broadcasts a cross-tab signal so any open /menu page in this browser
+  // instantly reloads the menu without polling.
+  function broadcastMenuUpdate() {
+    try {
+      const channel = new BroadcastChannel('menu-updates');
+      channel.postMessage('menu-updated');
+      channel.close();
+    } catch {
+      // BroadcastChannel not supported — graceful degradation
     }
   }
 
@@ -93,6 +109,7 @@ export default function MenuCMS() {
         setEditingCategory(null);
         setCategoryName('');
         setCategoryDescription('');
+        broadcastMenuUpdate();
         loadMenuData();
       } else {
         alert(data.error || 'Failed to save category');
@@ -108,6 +125,7 @@ export default function MenuCMS() {
       const res = await fetch(`/api/cms/menu?action=category&id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
+        broadcastMenuUpdate();
         loadMenuData();
       } else {
         alert(data.error);
@@ -153,6 +171,7 @@ export default function MenuCMS() {
       if (data.success) {
         setIsDishModalOpen(false);
         resetDishForm();
+        broadcastMenuUpdate();
         loadMenuData();
       } else {
         alert(data.error);
@@ -207,6 +226,7 @@ export default function MenuCMS() {
       const res = await fetch(`/api/cms/menu?action=dish&id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
+        broadcastMenuUpdate();
         setCategories(prev => prev.map(cat => ({
           ...cat,
           dishes: cat.dishes.filter((d: any) => d.id !== id)
@@ -245,6 +265,7 @@ export default function MenuCMS() {
       });
       const data = await res.json();
       if (data.success) {
+        broadcastMenuUpdate();
         loadMenuData();
       } else {
         alert(data.error);
@@ -292,14 +313,15 @@ export default function MenuCMS() {
         }));
         alert(data.error || 'Failed to update stock status on server');
       } else {
-        // Force an immediate background refetch mutation to keep UI coupled with live database
-        const freshRes = await fetch('/api/cms/menu', {
+        // Broadcast + force an immediate background refetch to keep UI coupled with live database
+        const freshRes = await fetch(`/api/cms/menu?t=${Date.now()}`, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-store, max-age=0' }
+          headers: { 'Cache-Control': 'no-cache' }
         });
         const freshData = await freshRes.json();
         if (freshData.success) {
           setCategories(freshData.categories);
+          broadcastMenuUpdate();
         }
       }
     } catch (e) {
@@ -352,14 +374,15 @@ export default function MenuCMS() {
         }));
         alert(data.error || 'Failed to update visibility status on server');
       } else {
-        // Force an immediate background refetch mutation to keep UI coupled with live database
-        const freshRes = await fetch('/api/cms/menu', {
+        // Broadcast + force an immediate background refetch to keep UI coupled with live database
+        const freshRes = await fetch(`/api/cms/menu?t=${Date.now()}`, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-store, max-age=0' }
+          headers: { 'Cache-Control': 'no-cache' }
         });
         const freshData = await freshRes.json();
         if (freshData.success) {
           setCategories(freshData.categories);
+          broadcastMenuUpdate();
         }
       }
     } catch (e) {

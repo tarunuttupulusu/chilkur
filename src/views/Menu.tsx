@@ -706,29 +706,43 @@ export const Menu: React.FC = () => {
     loadMenu();
   }, [loadMenu]);
 
-  // 1. Force Client-Side Router Route Refresh & Dynamic Polling
-  // Refreshes Next.js client-side cache tree silently on window focus or 3-second interval heartbeat
+  // ─── Smart Menu Refresh (no polling) ──────────────────────────────────────
+  // Strategy 1: BroadcastChannel — when admin saves in another tab/window on the
+  // same browser, it broadcasts 'menu-updated'. This tab receives it instantly
+  // and reloads the menu without any DB polling overhead.
+  //
+  // Strategy 2: Focus / visibilitychange — when the user switches back to this
+  // tab (e.g. after checking the admin portal), we silently reload the menu in
+  // the background so they always see the freshest state.
   useEffect(() => {
+    // BroadcastChannel: instant cross-tab invalidation (same origin, same browser)
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('menu-updates');
+      channel.onmessage = (event) => {
+        if (event.data === 'menu-updated') {
+          loadMenu();
+        }
+      };
+    } catch {
+      // BroadcastChannel not supported (old browsers) — graceful degradation
+    }
+
+    // Focus / visibility refresh — silent background reload on tab switch
     const handleFocus = () => {
-      router.refresh();
       loadMenu();
     };
-
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('visibilitychange', handleFocus);
-    
-    // Background polling interval to fetch fresh DB state silently
-    const interval = setInterval(() => {
-      loadMenu();
-      router.refresh();
-    }, 3000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadMenu();
+    });
 
     return () => {
+      channel?.close();
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('visibilitychange', handleFocus);
-      clearInterval(interval);
     };
-  }, [router, loadMenu]);
+  }, [loadMenu]);
+
 
   // Flatten active dishes for search, filtering, and deep-linking
   const allDishes = useMemo(() => {

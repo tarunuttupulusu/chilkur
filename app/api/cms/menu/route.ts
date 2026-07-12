@@ -14,6 +14,14 @@ const revalidateTag = (tag: string) => {
 // GET /api/cms/menu
 // Fetches all categories and dishes, with optional search, filtering, and pagination.
 export async function GET(request: Request) {
+  // Headers that prevent ALL caching layers (Vercel Edge, CDN, browser) from caching this response.
+  const noCacheHeaders = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store',
+  };
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -78,7 +86,7 @@ export async function GET(request: Request) {
           total,
           totalPages: Math.ceil(total / limit),
         }
-      });
+      }, { headers: noCacheHeaders });
     }
 
     // Default: return categories grouped with their dishes
@@ -92,12 +100,13 @@ export async function GET(request: Request) {
       }
     });
 
-    return NextResponse.json({ success: true, categories });
+    return NextResponse.json({ success: true, categories }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Error fetching menu:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: noCacheHeaders });
   }
 }
+
 
 // POST /api/cms/menu
 // Creates a new Dish or Category. Protected (admin/staff only).
@@ -139,7 +148,6 @@ export async function POST(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
@@ -185,7 +193,6 @@ export async function POST(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
@@ -235,7 +242,6 @@ export async function PUT(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
@@ -277,7 +283,6 @@ export async function PUT(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
@@ -320,7 +325,6 @@ export async function DELETE(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
@@ -339,7 +343,6 @@ export async function DELETE(request: Request) {
       await Promise.all([
         revalidatePath('/menu'),
         revalidatePath('/'),
-        revalidatePath('/api/cms/menu'),
         revalidateTag('menu-items')
       ]);
 
