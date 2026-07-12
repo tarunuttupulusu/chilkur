@@ -18,7 +18,11 @@ export const GalleryPage: React.FC = () => {
   useEffect(() => {
     async function loadGallery() {
       try {
-        const res = await fetch('/api/cms/gallery');
+        // Cache-busting ensures we always get fresh data from the DB
+        const res = await fetch(`/api/cms/gallery?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
         const data = await res.json();
         if (data.success) {
           setGalleryList(data.photos);
@@ -31,7 +35,29 @@ export const GalleryPage: React.FC = () => {
       }
     }
     loadGallery();
+
+    // BroadcastChannel: instantly reflects admin gallery changes in the same browser
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('gallery-updates');
+      channel.onmessage = (event) => {
+        if (event.data === 'gallery-updated') loadGallery();
+      };
+    } catch { /* old browsers — graceful degradation */ }
+
+    // Focus/visibility refresh: reload when user switches back to this tab
+    const handleFocus = () => loadGallery();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadGallery();
+    });
+
+    return () => {
+      channel?.close();
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
+
 
   const openLightbox = (index: number) => {
     setSelectedPhotoIndex(index);

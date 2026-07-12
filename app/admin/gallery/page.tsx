@@ -44,7 +44,11 @@ export default function GalleryCMS() {
   async function loadGalleryData() {
     setLoading(true);
     try {
-      const res = await fetch('/api/cms/gallery');
+      // Cache-busting ensures admin always sees freshest state after a save
+      const res = await fetch(`/api/cms/gallery?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (data.success) {
         setPhotos(data.photos || []);
@@ -57,6 +61,15 @@ export default function GalleryCMS() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Broadcasts a cross-tab signal so any open /gallery page instantly reloads
+  function broadcastGalleryUpdate() {
+    try {
+      const channel = new BroadcastChannel('gallery-updates');
+      channel.postMessage('gallery-updated');
+      channel.close();
+    } catch { /* old browsers */ }
   }
 
   // 1. TARGET ALBUM DROPDOWN OPTIONS LIST
@@ -141,6 +154,7 @@ export default function GalleryCMS() {
         setUploadIsFeatured(false);
         setUploadMenuCategory('');
         setUploadMenuDish('');
+        broadcastGalleryUpdate();
         loadGalleryData();
       } else {
         alert(dbData.error);
@@ -171,6 +185,7 @@ export default function GalleryCMS() {
       });
       const data = await res.json();
       if (data.success) {
+        broadcastGalleryUpdate();
         loadGalleryData();
       } else {
         alert(data.error || 'Failed to update feature status');
@@ -230,6 +245,7 @@ export default function GalleryCMS() {
       if (data.success) {
         setEditingPhoto(null);
         setReplaceFile(null);
+        broadcastGalleryUpdate();
         loadGalleryData();
       } else {
         alert(data.error);
@@ -267,6 +283,7 @@ export default function GalleryCMS() {
       });
       const data = await res.json();
       if (data.success) {
+        broadcastGalleryUpdate();
         loadGalleryData();
       } else {
         alert(data.error || 'Failed to reorder items');
@@ -283,6 +300,7 @@ export default function GalleryCMS() {
       const res = await fetch(`/api/cms/gallery?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
+        broadcastGalleryUpdate();
         loadGalleryData();
       } else {
         alert(data.error);

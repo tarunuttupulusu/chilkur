@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { getSessionUser, logAdminAction } from '@/lib/auth';
+
+// Headers that prevent ALL caching layers (Vercel Edge, CDN, browser) from caching this response.
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+  'Surrogate-Control': 'no-store',
+};
 
 // GET /api/cms/gallery
 export async function GET(request: Request) {
@@ -40,10 +49,10 @@ export async function GET(request: Request) {
       success: true, 
       photos, 
       albums: albums.map(a => a.albumName)
-    });
+    }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Error fetching gallery:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500, headers: noCacheHeaders });
   }
 }
 
@@ -74,8 +83,9 @@ export async function POST(request: Request) {
     });
 
     await logAdminAction(user.id, user.email, 'ADD_GALLERY_PHOTO', `Photo: ${photo.title}`, null, photo);
+    await Promise.all([revalidatePath('/gallery'), revalidatePath('/'), revalidateTag('gallery')]);
 
-    return NextResponse.json({ success: true, photo });
+    return NextResponse.json({ success: true, photo }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Error creating gallery photo:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -104,8 +114,9 @@ export async function PUT(request: Request) {
       
       await Promise.all(updates);
       await logAdminAction(user.id, user.email, 'REORDER_GALLERY', `Reordered ${updates.length} items`, null, null);
+      await Promise.all([revalidatePath('/gallery'), revalidatePath('/'), revalidateTag('gallery')]);
       
-      return NextResponse.json({ success: true, message: 'Reordered successfully' });
+      return NextResponse.json({ success: true, message: 'Reordered successfully' }, { headers: noCacheHeaders });
     }
 
     // Normal update
@@ -134,8 +145,9 @@ export async function PUT(request: Request) {
     });
 
     await logAdminAction(user.id, user.email, 'UPDATE_GALLERY_PHOTO', `Photo: ${photo.title}`, oldVal, photo);
+    await Promise.all([revalidatePath('/gallery'), revalidatePath('/'), revalidateTag('gallery')]);
 
-    return NextResponse.json({ success: true, photo });
+    return NextResponse.json({ success: true, photo }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Error updating gallery:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -165,8 +177,9 @@ export async function DELETE(request: Request) {
     await prisma.galleryPhoto.delete({ where: { id } });
 
     await logAdminAction(user.id, user.email, 'DELETE_GALLERY_PHOTO', `Photo: ${photo.title}`, photo, null);
+    await Promise.all([revalidatePath('/gallery'), revalidatePath('/'), revalidateTag('gallery')]);
 
-    return NextResponse.json({ success: true, message: 'Photo deleted successfully' });
+    return NextResponse.json({ success: true, message: 'Photo deleted successfully' }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Error deleting gallery photo:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
