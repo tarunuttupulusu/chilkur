@@ -155,14 +155,9 @@ export async function POST(request: Request) {
     } 
     
     if (type === 'dish') {
-      if (!data.name || !data.price || !data.categoryId || !data.image) {
+      // Note: price can be 0, so use explicit null check (not !data.price which would reject 0)
+      if (!data.name || data.price === undefined || data.price === null || !data.categoryId || !data.image) {
         return NextResponse.json({ success: false, error: 'Missing required dish fields (name, price, categoryId, image)' }, { status: 400 });
-      }
-
-      // Check duplicate
-      const existing = await prisma.dish.findUnique({ where: { name: data.name } });
-      if (existing) {
-        return NextResponse.json({ success: false, error: 'Dish name already exists' }, { status: 400 });
       }
 
       const dish = await prisma.dish.create({

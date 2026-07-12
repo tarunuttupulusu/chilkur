@@ -9,6 +9,7 @@ import {
 export default function MenuCMS() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [auditLog, setAuditLog] = useState<any[]>([]);
 
@@ -56,12 +57,16 @@ export default function MenuCMS() {
   async function loadMenuData() {
     setLoading(true);
     try {
-      // Cache-busting ensures admin always sees the freshest DB state after a save
-      const res = await fetch(`/api/cms/menu?t=${Date.now()}`, {
+      // Admin fetches ALL dishes including hidden ones
+      const res = await fetch(`/api/cms/menu?t=${Date.now()}&includeHidden=true`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       });
       const data = await res.json();
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
       if (data.success) {
         setCategories(data.categories || []);
       } else {
@@ -90,7 +95,7 @@ export default function MenuCMS() {
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!categoryName) return;
-
+    setIsSaving(true);
     try {
       const method = editingCategory ? 'PUT' : 'POST';
 
@@ -111,6 +116,7 @@ export default function MenuCMS() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
+      if (res.status === 401) { window.location.href = '/admin/login'; return; }
       const data = await res.json();
       if (data.success) {
         setIsCategoryModalOpen(false);
@@ -124,6 +130,9 @@ export default function MenuCMS() {
       }
     } catch (e) {
       console.error(e);
+      alert('Network error — check your connection');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -147,8 +156,11 @@ export default function MenuCMS() {
   // --- Dish Actions ---
   const handleSaveDish = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dishName || !dishCategoryId) return;
-
+    if (!dishName || !dishCategoryId) {
+      alert('Dish name and category are required.');
+      return;
+    }
+    setIsSaving(true);
     try {
       const method = editingDish ? 'PUT' : 'POST';
       const dishData = {
@@ -176,11 +188,14 @@ export default function MenuCMS() {
         ? { type: 'dish', id: editingDish.id, data: dishData }
         : { type: 'dish', data: dishData };
 
+      console.log('[handleSaveDish] payload →', JSON.stringify(body, null, 2));
+
       const res = await fetch('/api/cms/menu', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
+      if (res.status === 401) { window.location.href = '/admin/login'; return; }
       const data = await res.json();
       if (data.success) {
         setIsDishModalOpen(false);
@@ -188,10 +203,13 @@ export default function MenuCMS() {
         broadcastMenuUpdate();
         loadMenuData();
       } else {
-        alert(data.error);
+        alert('Save failed: ' + (data.error || 'Unknown error'));
       }
     } catch (e) {
       console.error(e);
+      alert('Network error — check your connection and try again');
+    } finally {
+      setIsSaving(false);
     }
   };
 
