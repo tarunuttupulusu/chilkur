@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       }
     });
 
-    revalidateTag('testimonials');
+    (revalidateTag as any)('testimonials');
 
     await logAdminAction(user.id, user.email, 'CREATE_TESTIMONIAL', `Testimonial by: ${testimonial.name}`, null, testimonial);
 
@@ -108,7 +108,7 @@ export async function PUT(request: Request) {
       }
     });
 
-    revalidateTag('testimonials');
+    (revalidateTag as any)('testimonials');
 
     await logAdminAction(user.id, user.email, 'UPDATE_TESTIMONIAL', `Testimonial: ${testimonial.name}`, oldVal, testimonial);
 
@@ -141,7 +141,7 @@ export async function DELETE(request: Request) {
 
     await prisma.testimonial.delete({ where: { id } });
 
-    revalidateTag('testimonials');
+    (revalidateTag as any)('testimonials');
 
     await logAdminAction(user.id, user.email, 'DELETE_TESTIMONIAL', `Testimonial: ${testimonial.name}`, testimonial, null);
 

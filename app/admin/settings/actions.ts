@@ -20,7 +20,7 @@ export async function createBranch(formData: FormData) {
         closingTime: "23:00"
       }
     });
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }
@@ -38,7 +38,7 @@ export async function updateBranch(formData: FormData) {
       where: { id },
       data: { name, phone, address }
     });
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }
@@ -60,7 +60,7 @@ export async function deleteBranch(id: string) {
     await prisma.branch.delete({
       where: { id }
     });
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }

@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
     await Promise.all(tableCreates);
 
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
 
     await logAdminAction(user.id, user.email, 'CREATE_BRANCH', `Branch: ${branch.name}`, null, branch);
 
@@ -155,7 +155,7 @@ export async function PUT(request: Request) {
       }
     }
 
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
 
     await logAdminAction(user.id, user.email, 'UPDATE_BRANCH', `Branch: ${branch.name}`, oldBranch, branch);
 
@@ -191,7 +191,7 @@ export async function DELETE(request: Request) {
     await prisma.table.deleteMany({ where: { branchId: id } });
     await prisma.branch.delete({ where: { id } });
 
-    revalidateTag('branches');
+    (revalidateTag as any)('branches');
 
     await logAdminAction(user.id, user.email, 'DELETE_BRANCH', `Branch: ${branch.name}`, branch, null);
 
