@@ -12,33 +12,43 @@ export default async function AdminDashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const totalReservations = await prisma.reservation.count();
-  const todayReservations = await prisma.reservation.count({
-    where: {
-      date: {
-        gte: today,
+  const [
+    totalReservations,
+    todayReservations,
+    verifiedDiscounts,
+    dishCount,
+    photoCount,
+    pendingTestimonials,
+    messageCount,
+    recentReservations
+  ] = await Promise.all([
+    prisma.reservation.count(),
+    prisma.reservation.count({
+      where: {
+        date: {
+          gte: today,
+        }
       }
-    }
-  });
-  const verifiedDiscounts = await prisma.reservation.count({
-    where: {
-      discountVerified: true
-    }
-  });
-  const dishCount = await prisma.dish.count();
-  const photoCount = await prisma.galleryPhoto.count();
-  const pendingTestimonials = await prisma.testimonial.count({
-    where: { isApproved: false }
-  });
-  const messageCount = await prisma.contactMessage.count();
-
-  const recentReservations = await prisma.reservation.findMany({
-    orderBy: [
-      { date: 'desc' },
-      { time: 'desc' }
-    ],
-    take: 5
-  });
+    }),
+    prisma.reservation.count({
+      where: {
+        discountVerified: true
+      }
+    }),
+    prisma.dish.count(),
+    prisma.galleryPhoto.count(),
+    prisma.testimonial.count({
+      where: { isApproved: false }
+    }),
+    prisma.contactMessage.count(),
+    prisma.reservation.findMany({
+      orderBy: [
+        { date: 'desc' },
+        { time: 'desc' }
+      ],
+      take: 5
+    })
+  ]);
 
   return (
     <div className="space-y-10 animate-fadeIn">

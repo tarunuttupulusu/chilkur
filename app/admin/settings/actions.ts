@@ -1,7 +1,7 @@
 'use server';
 
 import prisma from '@/lib/prisma';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 
 // Server Action 1: Create a new Branch
 export async function createBranch(formData: FormData) {
@@ -20,6 +20,7 @@ export async function createBranch(formData: FormData) {
         closingTime: "23:00"
       }
     });
+    revalidateTag('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }
@@ -37,6 +38,7 @@ export async function updateBranch(formData: FormData) {
       where: { id },
       data: { name, phone, address }
     });
+    revalidateTag('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }
@@ -58,6 +60,7 @@ export async function deleteBranch(id: string) {
     await prisma.branch.delete({
       where: { id }
     });
+    revalidateTag('branches');
     revalidatePath('/admin/settings');
     revalidatePath('/');
   }

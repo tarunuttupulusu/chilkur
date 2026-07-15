@@ -34,11 +34,63 @@ export default function MessagesCMS() {
     try {
       const res = await fetch('/api/cms/messages?limit=50');
       const data = await res.json();
-      if (data.success) {
-        setMessages(data.messages || []);
-        if (data.messages && data.messages.length > 0 && !selectedMessageId) {
-          setSelectedMessageId(data.messages[0].id);
-          markAsRead(data.messages[0].id);
+      if (data.success && data.messages) {
+        const allMessages = data.messages;
+
+        // Separate customer messages and admin replies
+        const customerMsgs = [];
+        const adminReplies = [];
+
+        for (const msg of allMessages) {
+          if (msg.email === 'admin@balajidhaba.com' || msg.name === 'Balaji Dhaba Admin') {
+            adminReplies.push(msg);
+          } else {
+            customerMsgs.push(msg);
+          }
+        }
+
+        // Group admin replies under the corresponding customer message by matching phone/email
+        const newRepliesStore: { [key: string]: any[] } = {};
+        for (const reply of adminReplies) {
+          // Find the latest customer message with matching phone or email created before the reply
+          const matchedCustomerMsg = customerMsgs
+            .filter(cm => {
+              const phoneMatch = reply.phone && cm.phone && reply.phone === cm.phone;
+              const emailMatch = reply.email && cm.email && reply.email === cm.email;
+              return (phoneMatch || emailMatch) && new Date(cm.createdAt) <= new Date(reply.createdAt);
+            })
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+          if (matchedCustomerMsg) {
+            if (!newRepliesStore[matchedCustomerMsg.id]) {
+              newRepliesStore[matchedCustomerMsg.id] = [];
+            }
+            newRepliesStore[matchedCustomerMsg.id].push({
+              id: reply.id,
+              message: reply.message.replace(/^\[REPLY TO .*?\]:\s*/, ''), // Strip reply prefix
+              createdAt: reply.createdAt,
+              isAdmin: true
+            });
+          }
+        }
+
+        // Sort replies chronologically
+        for (const msgId in newRepliesStore) {
+          newRepliesStore[msgId].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        }
+
+        // Process customer messages to determine if they have replies
+        const processedCustomerMsgs = customerMsgs.map(cm => ({
+          ...cm,
+          isReplied: !!(newRepliesStore[cm.id] && newRepliesStore[cm.id].length > 0)
+        }));
+
+        setRepliesStore(newRepliesStore);
+        setMessages(processedCustomerMsgs);
+
+        if (processedCustomerMsgs.length > 0 && !selectedMessageId) {
+          setSelectedMessageId(processedCustomerMsgs[0].id);
+          markAsRead(processedCustomerMsgs[0].id);
         }
       }
     } catch (e) {

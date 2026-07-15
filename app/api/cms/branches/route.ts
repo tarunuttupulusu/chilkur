@@ -1,18 +1,27 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionUser, logAdminAction } from '@/lib/auth';
+import { unstable_cache, revalidateTag } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/cms/branches
-export async function GET() {
-  try {
-    const branches = await prisma.branch.findMany({
+const getCachedBranches = unstable_cache(
+  async () => {
+    return prisma.branch.findMany({
       include: {
         tables: true
       },
       orderBy: { name: 'asc' }
     });
+  },
+  ['branches-list'],
+  { tags: ['branches'] }
+);
+
+// GET /api/cms/branches
+export async function GET() {
+  try {
+    const branches = await getCachedBranches();
 
     return NextResponse.json({ success: true, branches });
   } catch (error: any) {
@@ -63,6 +72,8 @@ export async function POST(request: Request) {
       );
     }
     await Promise.all(tableCreates);
+
+    revalidateTag('branches');
 
     await logAdminAction(user.id, user.email, 'CREATE_BRANCH', `Branch: ${branch.name}`, null, branch);
 
@@ -144,6 +155,8 @@ export async function PUT(request: Request) {
       }
     }
 
+    revalidateTag('branches');
+
     await logAdminAction(user.id, user.email, 'UPDATE_BRANCH', `Branch: ${branch.name}`, oldBranch, branch);
 
     return NextResponse.json({ success: true, branch });
@@ -177,6 +190,8 @@ export async function DELETE(request: Request) {
     // Cascade delete tables
     await prisma.table.deleteMany({ where: { branchId: id } });
     await prisma.branch.delete({ where: { id } });
+
+    revalidateTag('branches');
 
     await logAdminAction(user.id, user.email, 'DELETE_BRANCH', `Branch: ${branch.name}`, branch, null);
 

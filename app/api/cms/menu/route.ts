@@ -13,10 +13,28 @@ const revalidateTag = (tag: string) => {
   }
 };
 
+import { unstable_cache } from 'next/cache';
+
+const getCachedMenu = unstable_cache(
+  async (canSeeHidden: boolean) => {
+    return prisma.category.findMany({
+      orderBy: { order: 'asc' },
+      include: {
+        dishes: {
+          where: !canSeeHidden ? { isHidden: false } : undefined,
+          orderBy: { order: 'asc' }
+        }
+      }
+    });
+  },
+  ['menu-categories-dishes'],
+  { tags: ['menu-items'] }
+);
+
 // GET /api/cms/menu
 // Fetches all categories and dishes, with optional search, filtering, and pagination.
 export async function GET(request: Request) {
-  // Headers that prevent ALL caching layers (Vercel Edge, CDN, browser) from caching this response.
+  // Headers that prevent browser from caching this response, but server-side cache is handled by Next.js.
   const noCacheHeaders = {
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
     'Pragma': 'no-cache',
@@ -91,16 +109,8 @@ export async function GET(request: Request) {
       }, { headers: noCacheHeaders });
     }
 
-    // Default: return categories grouped with their dishes
-    const categories = await prisma.category.findMany({
-      orderBy: { order: 'asc' },
-      include: {
-        dishes: {
-          where: !canSeeHidden ? { isHidden: false } : undefined,
-          orderBy: { order: 'asc' }
-        }
-      }
-    });
+    // Default: return cached categories grouped with their dishes
+    const categories = await getCachedMenu(canSeeHidden);
 
     return NextResponse.json({ success: true, categories }, { headers: noCacheHeaders });
   } catch (error: any) {

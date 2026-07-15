@@ -1,8 +1,24 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getSessionUser, logAdminAction } from '@/lib/auth';
+import { unstable_cache, revalidateTag } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
+
+const getCachedTestimonials = unstable_cache(
+  async (approvedOnly: boolean) => {
+    const where: any = {};
+    if (approvedOnly) {
+      where.isApproved = true;
+    }
+    return prisma.testimonial.findMany({
+      where,
+      orderBy: { order: 'asc' }
+    });
+  },
+  ['testimonials-list'],
+  { tags: ['testimonials'] }
+);
 
 // GET /api/cms/testimonials
 export async function GET(request: Request) {
@@ -10,15 +26,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const approvedOnly = searchParams.get('approvedOnly') === 'true';
 
-    const where: any = {};
-    if (approvedOnly) {
-      where.isApproved = true;
-    }
-
-    const testimonials = await prisma.testimonial.findMany({
-      where,
-      orderBy: { order: 'asc' }
-    });
+    const testimonials = await getCachedTestimonials(approvedOnly);
 
     return NextResponse.json({ success: true, testimonials });
   } catch (error: any) {
@@ -53,6 +61,8 @@ export async function POST(request: Request) {
         order: body.order ?? 0
       }
     });
+
+    revalidateTag('testimonials');
 
     await logAdminAction(user.id, user.email, 'CREATE_TESTIMONIAL', `Testimonial by: ${testimonial.name}`, null, testimonial);
 
@@ -98,6 +108,8 @@ export async function PUT(request: Request) {
       }
     });
 
+    revalidateTag('testimonials');
+
     await logAdminAction(user.id, user.email, 'UPDATE_TESTIMONIAL', `Testimonial: ${testimonial.name}`, oldVal, testimonial);
 
     return NextResponse.json({ success: true, testimonial });
@@ -128,6 +140,8 @@ export async function DELETE(request: Request) {
     }
 
     await prisma.testimonial.delete({ where: { id } });
+
+    revalidateTag('testimonials');
 
     await logAdminAction(user.id, user.email, 'DELETE_TESTIMONIAL', `Testimonial: ${testimonial.name}`, testimonial, null);
 

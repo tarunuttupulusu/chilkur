@@ -83,13 +83,13 @@ export async function POST(request: Request) {
     if (body.action === 'seed_reset') {
       const { execSync } = require('child_process');
       try {
-        execSync('npx tsx prisma/seed-cms.ts', { cwd: process.cwd() });
+        execSync('npx tsx prisma/seed-cms.ts', { cwd: process.cwd(), shell: true });
         await logAdminAction(user.id, user.email, 'SEED_RESET_DATABASE', 'Database Re-seeded to Factory Defaults', null, null);
         return NextResponse.json({ success: true, message: 'Database successfully seeded' });
       } catch (execErr: any) {
         console.error('Seeding exec error:', execErr);
         // Fallback: try npx ts-node if tsx is not present
-        execSync('npx ts-node prisma/seed-cms.ts', { cwd: process.cwd() });
+        execSync('npx ts-node prisma/seed-cms.ts', { cwd: process.cwd(), shell: true });
         await logAdminAction(user.id, user.email, 'SEED_RESET_DATABASE', 'Database Re-seeded to Factory Defaults', null, null);
         return NextResponse.json({ success: true, message: 'Database successfully seeded' });
       }
